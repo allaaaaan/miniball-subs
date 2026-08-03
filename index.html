@@ -33,7 +33,8 @@
   .suggest b { color: #ffd166; }
   .adj { display: flex; flex-direction: column; gap: 4px; }
   .adjb { border: none; border-radius: 8px; background: var(--card2); color: var(--text); font-size: .7rem; padding: 4px 9px; font-weight: 700; }
-  .pair { display: inline-flex; align-items: center; gap: 4px; margin: 3px 8px 3px 0; }
+  .pair { display: inline-flex; align-items: center; gap: 4px; margin: 3px 8px 3px 0; border: none; background: rgba(255,255,255,.09); border-radius: 999px; padding: 4px 7px; cursor: pointer; }
+  .pair:active { background: rgba(255,255,255,.22); }
   .tag { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .85rem; color: #fff; }
   .toff { background: var(--red); } .ton { background: var(--green); }
   .arw { color: var(--dim); font-weight: 700; }
@@ -132,6 +133,11 @@ function toggleHalf() {
   save(); render();
 }
 function setCourtSize(v) { S.courtSize = +v; save(); render(); }
+function doSwap(a, b) {
+  S.players[a].on = false;
+  S.players[b].on = true;
+  save(); render();
+}
 function adjClock(d) {
   S.clock = Math.max(0, S.clock + d);
   S.players.forEach(p => { if (p.on) p.secs = Math.max(0, p.secs + d); });
@@ -190,7 +196,7 @@ function render() {
       else break;
     }
     sug = pairs.length
-      ? "Next subs: " + pairs.map(([a, b]) => `<span class="pair"><span class="tag toff">${S.players[a].name}</span><span class="arw">➜</span><span class="tag ton">${S.players[b].name}</span></span>`).join("")
+      ? "Next subs (tap to swap): " + pairs.map(([a, b]) => `<button class="pair" onclick="doSwap(${a},${b})"><span class="tag toff">${S.players[a].name}</span><span class="arw">➜</span><span class="tag ton">${S.players[b].name}</span></button>`).join("")
       : "Court time is balanced — no sub needed right now.";
   }
   document.getElementById("suggest").innerHTML = sug;
