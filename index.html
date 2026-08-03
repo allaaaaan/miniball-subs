@@ -86,16 +86,16 @@
 
 <script>
 const DEFAULT_PLAYERS = [
-  { name: "Kemo",     gender: "M" },
   { name: "Henry",    gender: "M" },
-  { name: "Zoe",      gender: "F" },
   { name: "Jason",    gender: "M" },
-  { name: "Yibai",    gender: "M" },
+  { name: "Kemo",     gender: "M" },
+  { name: "Leonardo", gender: "M" },
   { name: "Sienna",   gender: "F" },
   { name: "Thea",     gender: "F" },
-  { name: "Leonardo", gender: "M" },
+  { name: "Yibai",    gender: "M" },
+  { name: "Zoe",      gender: "F" },
 ];
-const KEY = "miniball-state-v2";
+const KEY = "miniball-state-v3";
 let S = load();
 function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch (e) {}
