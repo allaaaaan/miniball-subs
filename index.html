@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Miniball Game Day</title>
+<style>
+  :root {
+    --bg: #0f1220; --card: #1a1f35; --card2: #232a4a; --text: #eef0fa; --dim: #9aa3c7;
+    --accent: #7c5cff; --green: #2ecc71; --orange: #f39c12; --red: #e74c3c;
+    --girl: #ff6bb0; --boy: #4aa3ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 12px; max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 1.15rem; margin-bottom: 2px; }
+  .sub { color: var(--dim); font-size: .8rem; margin-bottom: 10px; }
+  .clockbar { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; }
+  #clock { font-size: 1.9rem; font-variant-numeric: tabular-nums; font-weight: 700; flex: 1; }
+  .half-pill { background: var(--card2); border: none; color: var(--text); border-radius: 10px; padding: 8px 12px; font-size: .85rem; font-weight: 600; }
+  button.ctl { border: none; border-radius: 10px; padding: 10px 14px; font-size: .9rem; font-weight: 700; color: #fff; background: var(--accent); }
+  button.ctl.running { background: var(--orange); }
+  h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 14px 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  h2 .count { font-size: .75rem; font-weight: 600; }
+  .player { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; border-left: 4px solid transparent; }
+  .player.oncourt { border-left-color: var(--green); background: var(--card2); }
+  .player .g { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 800; color: #fff; background: #555; flex-shrink: 0; }
+  .player .g.F { background: var(--girl); } .player .g.M { background: var(--boy); }
+  .player .name { flex: 1; font-weight: 600; font-size: .95rem; }
+  .player .time { font-variant-numeric: tabular-nums; color: var(--dim); font-size: .85rem; }
+  .player .act { border: none; border-radius: 9px; padding: 7px 11px; font-size: .8rem; font-weight: 700; color: #fff; }
+  .act.on { background: var(--green); } .act.off { background: var(--red); }
+  .suggest { background: linear-gradient(120deg, #2b2350, #1c2a50); border-radius: 12px; padding: 10px 14px; font-size: .88rem; margin: 10px 0; }
+  .suggest b { color: #ffd166; }
+  .genderline { font-size: .8rem; color: var(--dim); margin: 4px 0 8px; }
+  details { background: var(--card); border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
+  summary { font-weight: 700; font-size: .9rem; cursor: pointer; }
+  details ul { margin: 8px 0 4px 18px; font-size: .85rem; color: var(--dim); line-height: 1.55; }
+  .rosteredit .player { opacity: .95; }
+  .toggle { border: none; border-radius: 9px; padding: 7px 11px; font-size: .8rem; font-weight: 700; color: #fff; background: var(--card2); }
+  .toggle.absent { background: var(--red); }
+  .footer-row { display: flex; gap: 8px; margin-top: 14px; }
+  .footer-row button { flex: 1; background: var(--card2); color: var(--dim); border: none; border-radius: 10px; padding: 10px; font-size: .8rem; font-weight: 600; }
+  select { background: var(--card2); color: var(--text); border: none; border-radius: 8px; padding: 6px 8px; font-size: .85rem; }
+</style>
+</head>
+<body>
+  <h1>🏀 Miniball Game Day</h1>
+  <div class="sub">2 halves · rolling subs · fair court time for everyone</div>
+
+  <div class="clockbar">
+    <span id="clock">00:00</span>
+    <button class="half-pill" id="halfBtn" onclick="toggleHalf()">1st half</button>
+    <button class="ctl" id="startBtn" onclick="toggleClock()">Start</button>
+  </div>
+
+  <div class="genderline" id="genderline"></div>
+  <div class="suggest" id="suggest"></div>
+
+  <h2>On court <span class="count"><span id="courtCount">0</span>/<select id="courtSize" onchange="setCourtSize(this.value)"><option>4</option><option selected>5</option></select></span></h2>
+  <div id="court"></div>
+
+  <h2>Bench</h2>
+  <div id="bench"></div>
+
+  <details>
+    <summary>Edit roster (absent / gender)</summary>
+    <div id="roster" class="rosteredit" style="margin-top:8px"></div>
+  </details>
+
+  <details>
+    <summary>How the game runs</summary>
+    <ul>
+      <li>Two halves, rolling substitutions (subs any time, wave from the bench).</li>
+      <li>Tap <b>Sub on / Sub off</b> — timers track everyone's court time automatically.</li>
+      <li>Aim: every present player gets roughly equal minutes across the game.</li>
+      <li>Keep the on-court gender mix balanced (count shown above).</li>
+      <li>Timers only run while the game clock is running — pause at half-time.</li>
+    </ul>
+  </details>
+
+  <div class="footer-row">
+    <button onclick="resetTimes()">Reset player times</button>
+    <button onclick="resetAll()">Reset whole game</button>
+  </div>
+
+<script>
+const DEFAULT_PLAYERS = [
+  { name: "Kemo",     gender: "?" },
+  { name: "Henry",    gender: "M" },
+  { name: "Zoe",      gender: "F" },
+  { name: "Jason",    gender: "M" },
+  { name: "Yibai",    gender: "?" },
+  { name: "Sienna",   gender: "F" },
+  { name: "Thea",     gender: "F" },
+  { name: "Leonardo", gender: "M" },
+];
+const KEY = "miniball-state-v1";
+let S = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch (e) {}
+  return {
+    players: DEFAULT_PLAYERS.map(p => ({ ...p, present: true, on: false, secs: 0 })),
+    clock: 0, running: false, half: 1, courtSize: 5,
+  };
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+
+let timer = null;
+function tick() {
+  S.clock++;
+  S.players.forEach(p => { if (p.on) p.secs++; });
+  save(); render();
+}
+function toggleClock() {
+  S.running = !S.running;
+  if (S.running) timer = setInterval(tick, 1000); else clearInterval(timer);
+  save(); render();
+}
+function toggleHalf() {
+  S.half = S.half === 1 ? 2 : 1;
+  save(); render();
+}
+function setCourtSize(v) { S.courtSize = +v; save(); render(); }
+function fmt(t) { return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+
+function subOn(i) {
+  if (S.players.filter(p => p.on).length >= S.courtSize) { alert("Court is full — sub someone off first."); return; }
+  S.players[i].on = true; save(); render();
+}
+function subOff(i) { S.players[i].on = false; save(); render(); }
+function togglePresent(i) {
+  const p = S.players[i]; p.present = !p.present; if (!p.present) p.on = false; save(); render();
+}
+function cycleGender(i) {
+  const order = ["M", "F", "?"]; const p = S.players[i];
+  p.gender = order[(order.indexOf(p.gender) + 1) % order.length]; save(); render();
+}
+function resetTimes() { if (confirm("Reset all player court times?")) { S.players.forEach(p => p.secs = 0); S.clock = 0; save(); render(); } }
+function resetAll() { if (confirm("Reset the whole game?")) { localStorage.removeItem(KEY); clearInterval(timer); S = load(); render(); } }
+
+function playerRow(p, i, side) {
+  const g = `<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`;
+  const t = `<span class="time">${fmt(p.secs)}</span>`;
+  const btn = side === "court"
+    ? `<button class="act off" onclick="subOff(${i})">Sub off</button>`
+    : `<button class="act on" onclick="subOn(${i})">Sub on</button>`;
+  return `<div class="player ${p.on ? "oncourt" : ""}">${g}<span class="name">${p.name}</span>${t}${btn}</div>`;
+}
+
+function render() {
+  document.getElementById("clock").textContent = fmt(S.clock);
+  document.getElementById("halfBtn").textContent = S.half === 1 ? "1st half" : "2nd half";
+  const b = document.getElementById("startBtn");
+  b.textContent = S.running ? "Pause" : "Start"; b.className = "ctl" + (S.running ? " running" : "");
+  document.getElementById("courtSize").value = S.courtSize;
+
+  const on = [], off = [];
+  S.players.forEach((p, i) => { if (!p.present) return; (p.on ? on : off).push(i); });
+  document.getElementById("courtCount").textContent = on.length;
+  document.getElementById("court").innerHTML = on.map(i => playerRow(S.players[i], i, "court")).join("") || `<div class="sub">Tap "Sub on" below to put players on.</div>`;
+  document.getElementById("bench").innerHTML = off.map(i => playerRow(S.players[i], i, "bench")).join("") || `<div class="sub">Bench is empty.</div>`;
+
+  const boys = on.filter(i => S.players[i].gender === "M").length;
+  const girls = on.filter(i => S.players[i].gender === "F").length;
+  document.getElementById("genderline").textContent = on.length ? `On court: ${boys} boys · ${girls} girls${on.length - boys - girls ? " · " + (on.length - boys - girls) + " unset" : ""}` : "";
+
+  let sug = "No suggestion — get the game started!";
+  if (on.length && off.length) {
+    const most = on.slice().sort((a, b) => S.players[b].secs - S.players[a].secs)[0];
+    const least = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs)[0];
+    if (S.players[most].secs - S.players[least].secs > 60)
+      sug = `Next sub: <b>${S.players[least].name}</b> (${fmt(S.players[least].secs)}) on for <b>${S.players[most].name}</b> (${fmt(S.players[most].secs)})`;
+    else sug = "Court time is balanced — no sub needed right now.";
+  }
+  document.getElementById("suggest").innerHTML = sug;
+
+  document.getElementById("roster").innerHTML = S.players.map((p, i) =>
+    `<div class="player">${`<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`}<span class="name">${p.name}</span><button class="toggle ${p.present ? "" : "absent"}" onclick="togglePresent(${i})">${p.present ? "Playing" : "Absent"}</button></div>`
+  ).join("");
+}
+if (S.running) timer = setInterval(tick, 1000);
+render();
+</script>
+</body>
+</html>
