@@ -45,7 +45,7 @@
 </head>
 <body>
   <h1>🏀 Miniball Game Day</h1>
-  <div class="sub">2 halves · rolling subs · fair court time for everyone</div>
+  <div class="sub">2 × 10-min halves · running clock · 1-min half-time · rolling subs</div>
 
   <div class="clockbar">
     <span id="clock">00:00</span>
@@ -70,7 +70,8 @@
   <details>
     <summary>How the game runs</summary>
     <ul>
-      <li>Two halves, rolling substitutions (subs any time, wave from the bench).</li>
+      <li>Ages 5–8 (Years 1–4): 20 minutes total on a running clock — two 10-minute halves with a 1-minute half-time.</li>
+      <li>Rolling substitutions — sub any time, wave from the bench.</li>
       <li>Tap <b>Sub on / Sub off</b> — timers track everyone's court time automatically.</li>
       <li>Aim: every present player gets roughly equal minutes across the game.</li>
       <li>Keep the on-court gender mix balanced (count shown above).</li>
@@ -85,16 +86,16 @@
 
 <script>
 const DEFAULT_PLAYERS = [
-  { name: "Kemo",     gender: "?" },
+  { name: "Kemo",     gender: "M" },
   { name: "Henry",    gender: "M" },
   { name: "Zoe",      gender: "F" },
   { name: "Jason",    gender: "M" },
-  { name: "Yibai",    gender: "?" },
+  { name: "Yibai",    gender: "M" },
   { name: "Sienna",   gender: "F" },
   { name: "Thea",     gender: "F" },
   { name: "Leonardo", gender: "M" },
 ];
-const KEY = "miniball-state-v1";
+const KEY = "miniball-state-v2";
 let S = load();
 function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch (e) {}
