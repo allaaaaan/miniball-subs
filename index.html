@@ -200,12 +200,12 @@ function render() {
     const benchSorted = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs);
     const pairs = [];
     for (let k = 0; k < Math.min(courtSorted.length, benchSorted.length); k++) {
-      if (S.players[courtSorted[k]].secs - S.players[benchSorted[k]].secs > 60) pairs.push([courtSorted[k], benchSorted[k]]);
+      if (S.players[courtSorted[k]].secs - S.players[benchSorted[k]].secs > 240) pairs.push([courtSorted[k], benchSorted[k]]);
       else break;
     }
     sug = pairs.length
       ? "Next subs (tap to swap): " + pairs.map(([a, b]) => `<button class="pair" onclick="doSwap(${a},${b})"><span class="tag toff">${S.players[a].name}</span><span class="arw">➜</span><span class="tag ton">${S.players[b].name}</span></button>`).join("")
-      : "Court time is balanced — no sub needed right now.";
+      : "No sub needed yet — next wave comes when someone is ~4 min ahead of the bench.";
   }
   document.getElementById("suggest").innerHTML = sug;
 
