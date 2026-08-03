@@ -206,7 +206,7 @@ function render() {
       else break;
     }
     sug = pairs.length
-      ? "Next subs (tap to swap): " + pairs.map(([a, b]) => `<button class="pair" onclick="doSwap(${a},${b})"><span class="tag toff">${S.players[a].name}</span><span class="arw">➜</span><span class="tag ton">${S.players[b].name}</span></button>`).join("")
+      ? "Next subs (tap to swap): " + pairs.map(([a, b]) => `<button class="pair" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span></button>`).join("")
       : "No sub needed yet — next wave comes when someone is ~4 min ahead of the bench.";
   }
   document.getElementById("suggest").innerHTML = sug;
