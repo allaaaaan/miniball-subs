@@ -38,6 +38,9 @@
   .tag { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .85rem; color: #fff; }
   .toff { background: var(--red); } .ton { background: var(--green); }
   .arw { color: var(--dim); font-weight: 700; }
+  .cd { font-size: .72rem; color: var(--dim); font-weight: 700; margin-left: 3px; font-variant-numeric: tabular-nums; }
+  .pair.duenow { background: rgba(255,209,102,.2); }
+  .pair.duenow .cd { color: #ffd166; }
   .genderline { font-size: .8rem; color: var(--dim); margin: 4px 0 8px; }
   details { background: var(--card); border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
   summary { font-weight: 700; font-size: .9rem; cursor: pointer; }
@@ -218,14 +221,19 @@ function render() {
   if (on.length && off.length) {
     const courtSorted = on.slice().sort((a, b) => S.players[b].secs - S.players[a].secs);
     const benchSorted = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs);
-    const pairs = [];
+    const remain = Math.max(0, GAME_SECS - S.clock);
+    const items = [];
     for (let k = 0; k < Math.min(courtSorted.length, benchSorted.length); k++) {
-      if (S.players[courtSorted[k]].secs - S.players[benchSorted[k]].secs > 240) pairs.push([courtSorted[k], benchSorted[k]]);
-      else break;
+      const c = S.players[courtSorted[k]], b = S.players[benchSorted[k]];
+      const due = Math.max(0, Math.min(
+        240 - (c.secs - b.secs),               // pacing: ~4-min shifts
+        fair - c.secs,                         // court player reaching their fair share
+        remain - Math.max(0, fair - b.secs)    // last chance for bench player to reach fair share
+      ));
+      items.push({ a: courtSorted[k], b: benchSorted[k], due });
     }
-    sug = pairs.length
-      ? "Next subs (tap to swap): " + pairs.map(([a, b]) => `<button class="pair" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span></button>`).join("")
-      : "No sub needed yet — next wave comes when someone is ~4 min ahead of the bench.";
+    sug = "Next subs (tap to swap): " + items.map(({ a, b, due }) =>
+      `<button class="pair ${due <= 0 ? "duenow" : ""}" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span><span class="cd">${due <= 0 ? "now!" : "in " + fmt(due)}</span></button>`).join("");
   }
   document.getElementById("suggest").innerHTML = sug;
 
