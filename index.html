@@ -64,6 +64,7 @@
     <button class="ctl" id="startBtn" onclick="toggleClock()">Start</button>
   </div>
 
+  <div class="genderline" id="fairline"></div>
   <div class="genderline" id="genderline"></div>
   <div class="suggest" id="suggest"></div>
 
@@ -107,6 +108,7 @@ const DEFAULT_PLAYERS = [
   { name: "Zoe",      gender: "F" },
 ];
 const KEY = "miniball-state-v3";
+const GAME_SECS = 20 * 60; // 2 x 10-min halves, running clock
 let S = load();
 function load() {
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch (e) {}
@@ -160,9 +162,9 @@ function cycleGender(i) {
 function resetTimes() { if (confirm("Reset all player court times?")) { S.players.forEach(p => p.secs = 0); S.clock = 0; save(); render(); } }
 function resetAll() { if (confirm("Reset the whole game?")) { localStorage.removeItem(KEY); clearInterval(timer); S = load(); render(); } }
 
-function playerRow(p, i, side) {
+function playerRow(p, i, side, fair) {
   const g = `<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`;
-  const t = `<span class="time">${fmt(p.secs)}</span>`;
+  const t = `<span class="time" ${fair && p.secs >= fair ? 'style="color:var(--green);font-weight:700"' : ""}>${fmt(p.secs)}</span>`;
   const btn = side === "court"
     ? `<button class="act off" onclick="subOff(${i})">Sub off</button>`
     : `<button class="act on" onclick="subOn(${i})">Sub on</button>`;
@@ -178,9 +180,15 @@ function render() {
 
   const on = [], off = [];
   S.players.forEach((p, i) => { if (!p.present) return; (p.on ? on : off).push(i); });
+  const present = on.length + off.length;
+  const fair = present ? Math.round(GAME_SECS * Math.min(S.courtSize, present) / present) : 0;
+  document.getElementById("fairline").textContent = present
+    ? `Fair share: ${fmt(fair)} each (${Math.min(S.courtSize, present)} on court × 20:00 ÷ ${present} playing)`
+    : "";
+
   document.getElementById("courtCount").textContent = on.length;
-  document.getElementById("court").innerHTML = on.map(i => playerRow(S.players[i], i, "court")).join("") || `<div class="sub">Tap "Sub on" below to put players on.</div>`;
-  document.getElementById("bench").innerHTML = off.map(i => playerRow(S.players[i], i, "bench")).join("") || `<div class="sub">Bench is empty.</div>`;
+  document.getElementById("court").innerHTML = on.map(i => playerRow(S.players[i], i, "court", fair)).join("") || `<div class="sub">Tap "Sub on" below to put players on.</div>`;
+  document.getElementById("bench").innerHTML = off.map(i => playerRow(S.players[i], i, "bench", fair)).join("") || `<div class="sub">Bench is empty.</div>`;
 
   const boys = on.filter(i => S.players[i].gender === "M").length;
   const girls = on.filter(i => S.players[i].gender === "F").length;
