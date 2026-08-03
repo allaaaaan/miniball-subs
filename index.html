@@ -31,6 +31,12 @@
   .act.on { background: var(--green); } .act.off { background: var(--red); }
   .suggest { background: linear-gradient(120deg, #2b2350, #1c2a50); border-radius: 12px; padding: 10px 14px; font-size: .88rem; margin: 10px 0; }
   .suggest b { color: #ffd166; }
+  .adj { display: flex; flex-direction: column; gap: 4px; }
+  .adjb { border: none; border-radius: 8px; background: var(--card2); color: var(--text); font-size: .7rem; padding: 4px 9px; font-weight: 700; }
+  .pair { display: inline-flex; align-items: center; gap: 4px; margin: 3px 8px 3px 0; }
+  .tag { padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: .85rem; color: #fff; }
+  .toff { background: var(--red); } .ton { background: var(--green); }
+  .arw { color: var(--dim); font-weight: 700; }
   .genderline { font-size: .8rem; color: var(--dim); margin: 4px 0 8px; }
   details { background: var(--card); border-radius: 12px; padding: 10px 14px; margin-top: 14px; }
   summary { font-weight: 700; font-size: .9rem; cursor: pointer; }
@@ -49,6 +55,10 @@
 
   <div class="clockbar">
     <span id="clock">00:00</span>
+    <div class="adj">
+      <button class="adjb" onclick="adjClock(1)">+1s</button>
+      <button class="adjb" onclick="adjClock(-1)">&minus;1s</button>
+    </div>
     <button class="half-pill" id="halfBtn" onclick="toggleHalf()">1st half</button>
     <button class="ctl" id="startBtn" onclick="toggleClock()">Start</button>
   </div>
@@ -122,6 +132,11 @@ function toggleHalf() {
   save(); render();
 }
 function setCourtSize(v) { S.courtSize = +v; save(); render(); }
+function adjClock(d) {
+  S.clock = Math.max(0, S.clock + d);
+  S.players.forEach(p => { if (p.on) p.secs = Math.max(0, p.secs + d); });
+  save(); render();
+}
 function fmt(t) { return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
 
 function subOn(i) {
@@ -167,11 +182,16 @@ function render() {
 
   let sug = "No suggestion — get the game started!";
   if (on.length && off.length) {
-    const most = on.slice().sort((a, b) => S.players[b].secs - S.players[a].secs)[0];
-    const least = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs)[0];
-    if (S.players[most].secs - S.players[least].secs > 60)
-      sug = `Next sub: <b>${S.players[least].name}</b> (${fmt(S.players[least].secs)}) on for <b>${S.players[most].name}</b> (${fmt(S.players[most].secs)})`;
-    else sug = "Court time is balanced — no sub needed right now.";
+    const courtSorted = on.slice().sort((a, b) => S.players[b].secs - S.players[a].secs);
+    const benchSorted = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs);
+    const pairs = [];
+    for (let k = 0; k < Math.min(courtSorted.length, benchSorted.length); k++) {
+      if (S.players[courtSorted[k]].secs - S.players[benchSorted[k]].secs > 60) pairs.push([courtSorted[k], benchSorted[k]]);
+      else break;
+    }
+    sug = pairs.length
+      ? "Next subs: " + pairs.map(([a, b]) => `<span class="pair"><span class="tag toff">${S.players[a].name}</span><span class="arw">➜</span><span class="tag ton">${S.players[b].name}</span></span>`).join("")
+      : "Court time is balanced — no sub needed right now.";
   }
   document.getElementById("suggest").innerHTML = sug;
 
