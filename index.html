@@ -48,6 +48,9 @@
   .footer-row { display: flex; gap: 8px; margin-top: 14px; }
   .footer-row button { flex: 1; background: var(--card2); color: var(--dim); border: none; border-radius: 10px; padding: 10px; font-size: .8rem; font-weight: 600; }
   select { background: var(--card2); color: var(--text); border: none; border-radius: 8px; padding: 6px 8px; font-size: .85rem; }
+  .addrow { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
+  .addrow input { flex: 1; background: var(--card2); color: var(--text); border: none; border-radius: 9px; padding: 9px 11px; font-size: .9rem; min-width: 0; }
+  .addrow input::placeholder { color: var(--dim); }
 </style>
 </head>
 <body>
@@ -77,6 +80,11 @@
   <details>
     <summary>Edit roster (absent / gender)</summary>
     <div id="roster" class="rosteredit" style="margin-top:8px"></div>
+    <div class="addrow">
+      <input id="npName" placeholder="Ad-hoc player name" maxlength="20">
+      <select id="npG"><option>M</option><option>F</option></select>
+      <button class="act on" onclick="addPlayer()">Add</button>
+    </div>
   </details>
 
   <details>
@@ -161,6 +169,16 @@ function cycleGender(i) {
   const order = ["M", "F", "?"]; const p = S.players[i];
   p.gender = order[(order.indexOf(p.gender) + 1) % order.length]; save(); render();
 }
+function addPlayer() {
+  const name = document.getElementById("npName").value.replace(/[<>&"']/g, "").trim();
+  if (!name) return;
+  S.players.push({ name, gender: document.getElementById("npG").value, present: true, on: false, secs: 0, adhoc: true });
+  document.getElementById("npName").value = "";
+  save(); render();
+}
+function removePlayer(i) {
+  if (confirm("Remove " + S.players[i].name + "?")) { S.players.splice(i, 1); save(); render(); }
+}
 function resetTimes() { if (confirm("Reset all player court times?")) { S.players.forEach(p => p.secs = 0); S.clock = 0; save(); render(); } }
 function resetAll() { if (confirm("Reset the whole game?")) { localStorage.removeItem(KEY); clearInterval(timer); S = load(); render(); } }
 
@@ -212,7 +230,7 @@ function render() {
   document.getElementById("suggest").innerHTML = sug;
 
   document.getElementById("roster").innerHTML = S.players.map((p, i) =>
-    `<div class="player">${`<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`}<span class="name">${p.name}</span><button class="toggle ${p.present ? "" : "absent"}" onclick="togglePresent(${i})">${p.present ? "Playing" : "Absent"}</button></div>`
+    `<div class="player">${`<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`}<span class="name">${p.name}</span>${p.adhoc ? `<button class="toggle" onclick="removePlayer(${i})">✕</button>` : ""}<button class="toggle ${p.present ? "" : "absent"}" onclick="togglePresent(${i})">${p.present ? "Playing" : "Absent"}</button></div>`
   ).join("");
 }
 if (S.running) timer = setInterval(tick, 1000);
