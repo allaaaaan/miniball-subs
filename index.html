@@ -54,6 +54,10 @@
   .addrow { display: flex; gap: 6px; margin-top: 10px; align-items: center; }
   .addrow input { flex: 1; background: var(--card2); color: var(--text); border: none; border-radius: 9px; padding: 9px 11px; font-size: .9rem; min-width: 0; }
   .addrow input::placeholder { color: var(--dim); }
+  .wavehead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .wavehead .when { font-variant-numeric: tabular-nums; color: #ffd166; font-weight: 700; }
+  .wavehead .when.now { color: var(--green); }
+  .hold { color: var(--dim); }
 </style>
 </head>
 <body>
@@ -71,6 +75,7 @@
   </div>
 
   <div class="genderline" id="fairline"></div>
+  <div class="genderline" id="paceline"></div>
   <div class="genderline" id="genderline"></div>
   <div class="suggest" id="suggest"></div>
 
@@ -96,6 +101,7 @@
       <li>Ages 5–8 (Years 1–4): 20 minutes total on a running clock — two 10-minute halves with a 1-minute half-time.</li>
       <li>Rolling substitutions — sub any time, wave from the bench.</li>
       <li>Tap <b>Sub on / Sub off</b> — timers track everyone's court time automatically.</li>
+      <li>Sub waves: every <b>20:00 ÷ players</b> (e.g. 2:30 with 8) the whole bench comes on for whoever has been on longest — everyone ends within ~30s of fair share.</li>
       <li>Aim: every present player gets roughly equal minutes across the game.</li>
       <li>Keep the on-court gender mix balanced (count shown above).</li>
       <li>Timers only run while the game clock is running — pause at half-time.</li>
@@ -103,6 +109,7 @@
   </details>
 
   <div class="footer-row">
+    <button onclick="shareLog()">Share game log</button>
     <button onclick="resetTimes()">Reset player times</button>
     <button onclick="resetAll()">Reset whole game</button>
   </div>
@@ -118,55 +125,136 @@ const DEFAULT_PLAYERS = [
   { name: "Yibai",    gender: "M" },
   { name: "Zoe",      gender: "F" },
 ];
-const KEY = "miniball-state-v3";
+const KEY = "miniball-state-v3", LASTLOG_KEY = "miniball-lastlog";
 const GAME_SECS = 20 * 60; // 2 x 10-min halves, running clock
+const MIN_GAP = 60;        // min seconds between the end of one wave and the next
+const HOLD_SECS = 90;      // no new subs inside the last 90s
+const FINAL_DEFICIT = 90;  // ...unless a bench player is this far under fair share
 let S = load();
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.players) return s; } catch (e) {}
-  const players = DEFAULT_PLAYERS.map(p => ({ ...p, present: true, on: false, secs: 0 }));
-  for (let i = players.length - 1; i > 0; i--) {   // new game: shuffle display order
-    const j = Math.floor(Math.random() * (i + 1));
-    [players[i], players[j]] = [players[j], players[i]];
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+  if (!s || !s.players) {
+    const players = DEFAULT_PLAYERS.map(p => ({ ...p, present: true, on: false, secs: 0 }));
+    for (let i = players.length - 1; i > 0; i--) {   // new game: shuffle display order
+      const j = Math.floor(Math.random() * (i + 1));
+      [players[i], players[j]] = [players[j], players[i]];
+    }
+    s = { players, clock: 0, running: false, half: 1, courtSize: 5 };
   }
-  return { players, clock: 0, running: false, half: 1, courtSize: 5 };
+  // migrate older saved states
+  s.players.forEach(p => { if (p.onSince == null) p.onSince = 0; if (p.offSince == null) p.offSince = 0; });
+  if (s.lastSwap == null) s.lastSwap = -9999;
+  if (!s.log) s.log = [];
+  if (s.wave === undefined) s.wave = null;
+  return s;
 }
 function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+function fmt(t) { t = Math.max(0, Math.round(t)); return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
+function wall() { const d = new Date(); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, "0")).join(":"); }
 
+/* ---------- logging ---------- */
+function snap() { return S.players.filter(p => p.present).map(p => p.name + " " + fmt(p.secs) + (p.on ? "*" : "")).join(", "); }
+function waveText() {
+  const w = S.wave; if (!w) return "-";
+  if (w.hold) return "HOLD: " + w.hold;
+  return "wave due " + fmt(w.due) + " [" + w.pairs.map(([a, b]) => S.players[b].name + "➜" + S.players[a].name).join(", ") + "]";
+}
+function logEv(ev, detail) {
+  S.log.push({ t: S.clock, h: S.half, w: wall(), ev, d: detail || "", sug: waveText(), snap: snap() });
+  if (S.log.length > 600) S.log.splice(0, S.log.length - 600);
+}
+function logText() {
+  const present = S.players.filter(p => p.present);
+  const head = [
+    "Miniball game log — " + new Date().toDateString(),
+    "Roster: " + S.players.map(p => p.name + "(" + p.gender + (p.present ? "" : ",absent") + ")").join(" "),
+    "Court size " + S.courtSize + " · playing " + present.length + " · wave period " + fmt(period()) + " · fair share " + fmt(fairShare()),
+    "Final: " + snap(), ""
+  ];
+  const lines = S.log.map(e => `${fmt(e.t)} H${e.h} ${e.w} ${e.ev}${e.d ? " " + e.d : ""} | sug: ${e.sug} | ${e.snap}`);
+  return head.concat(lines).join("\n");
+}
+async function shareLog() {
+  let text = logText();
+  if (!S.log.length && localStorage.getItem(LASTLOG_KEY)) text = "(previous game)\n" + localStorage.getItem(LASTLOG_KEY);
+  try {
+    if (navigator.share) { await navigator.share({ title: "Miniball game log", text }); return; }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  try { await navigator.clipboard.writeText(text); alert("Log copied to clipboard (" + S.log.length + " events)."); }
+  catch (e) { prompt("Copy the log:", text); }
+}
+window.onerror = (m, s, l) => { try { logEv("error", m + " @" + l); save(); } catch (e) {} };
+
+/* ---------- pacing / wave model ---------- */
+function presentCount() { return S.players.filter(p => p.present).length; }
+function period() { const n = presentCount(); return n > S.courtSize ? Math.round(GAME_SECS / n) : 0; }
+function fairShare() { const n = presentCount(); return n ? Math.round(GAME_SECS * Math.min(S.courtSize, n) / n) : 0; }
+function setOn(i, on) {
+  const p = S.players[i]; if (p.on === on) return;
+  p.on = on; if (on) p.onSince = S.clock; else p.offSince = S.clock;
+}
+function buildWave() {
+  const on = [], off = [];
+  S.players.forEach((p, i) => { if (!p.present) return; (p.on ? on : off).push(i); });
+  if (!on.length || !off.length) { S.wave = null; return; }
+  const P = period();
+  const remain = GAME_SECS - S.clock;
+  const floor = Math.max(S.clock, S.lastSwap + MIN_GAP);
+  on.sort((a, b) => S.players[b].secs - S.players[a].secs || S.players[a].onSince - S.players[b].onSince);
+  off.sort((a, b) => S.players[a].secs - S.players[b].secs || S.players[a].offSince - S.players[b].offSince);
+  const fair = fairShare();
+  if (remain < HOLD_SECS) { S.wave = { hold: "No more subs — play it out." }; return; }
+  let due = P ? Math.ceil(floor / P) * P : floor;   // next scheduled wave time at/after floor
+  let n = Math.min(on.length, off.length);
+  if (due > GAME_SECS - HOLD_SECS) {                  // endgame: only if it fixes a real deficit
+    const needy = off.filter(i => fair - S.players[i].secs >= FINAL_DEFICIT);
+    if (!needy.length) { S.wave = { hold: "No more subs — everyone's near fair share. Play it out." }; return; }
+    n = Math.min(n, needy.length); due = floor;
+  }
+  S.wave = { due, pairs: on.slice(0, n).map((a, k) => [a, off[k]]) };
+}
+
+/* ---------- clock ---------- */
 let timer = null;
 function tick() {
   S.clock++;
   S.players.forEach(p => { if (p.on) p.secs++; });
+  if (S.clock % 60 === 0) logEv("tick");
+  if (S.wave && S.wave.hold && S.clock % 15 === 0) buildWave();
   save(); render();
 }
 function toggleClock() {
   S.running = !S.running;
   if (S.running) timer = setInterval(tick, 1000); else clearInterval(timer);
-  save(); render();
+  logEv(S.running ? "start" : "pause"); save(); render();
 }
-function toggleHalf() {
-  S.half = S.half === 1 ? 2 : 1;
-  save(); render();
-}
-function setCourtSize(v) { S.courtSize = +v; save(); render(); }
-function doSwap(a, b) {
-  S.players[a].on = false;
-  S.players[b].on = true;
-  save(); render();
-}
+function toggleHalf() { S.half = S.half === 1 ? 2 : 1; logEv("half", String(S.half)); save(); render(); }
+function setCourtSize(v) { S.courtSize = +v; buildWave(); logEv("courtsize", v); save(); render(); }
 function adjClock(d) {
   S.clock = Math.max(0, S.clock + d);
   S.players.forEach(p => { if (p.on) p.secs = Math.max(0, p.secs + d); });
+  logEv("adj", (d > 0 ? "+" : "") + d); save(); render();
+}
+
+/* ---------- actions ---------- */
+function doSwap(a, b) {
+  setOn(a, false); setOn(b, true); S.lastSwap = S.clock;
+  if (S.wave && S.wave.pairs) {
+    S.wave.pairs = S.wave.pairs.filter(([x, y]) => x !== a && y !== b);
+    if (!S.wave.pairs.length) buildWave();
+  } else buildWave();
+  logEv("swap", S.players[b].name + "➜" + S.players[a].name);
   save(); render();
 }
-function fmt(t) { return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); }
-
 function subOn(i) {
   if (S.players.filter(p => p.on).length >= S.courtSize) { alert("Court is full — sub someone off first."); return; }
-  S.players[i].on = true; save(); render();
+  setOn(i, true); S.lastSwap = S.clock; buildWave(); logEv("on", S.players[i].name); save(); render();
 }
-function subOff(i) { S.players[i].on = false; save(); render(); }
+function subOff(i) { setOn(i, false); S.lastSwap = S.clock; buildWave(); logEv("off", S.players[i].name); save(); render(); }
 function togglePresent(i) {
-  const p = S.players[i]; p.present = !p.present; if (!p.present) p.on = false; save(); render();
+  const p = S.players[i]; p.present = !p.present; if (!p.present) setOn(i, false);
+  buildWave(); logEv("present", p.name + (p.present ? " playing" : " absent")); save(); render();
 }
 function cycleGender(i) {
   const order = ["M", "F", "?"]; const p = S.players[i];
@@ -175,16 +263,27 @@ function cycleGender(i) {
 function addPlayer() {
   const name = document.getElementById("npName").value.replace(/[<>&"']/g, "").trim();
   if (!name) return;
-  S.players.push({ name, gender: document.getElementById("npG").value, present: true, on: false, secs: 0, adhoc: true });
+  S.players.push({ name, gender: document.getElementById("npG").value, present: true, on: false, secs: 0, onSince: 0, offSince: 0, adhoc: true });
   document.getElementById("npName").value = "";
-  save(); render();
+  buildWave(); logEv("add", name); save(); render();
 }
 function removePlayer(i) {
-  if (confirm("Remove " + S.players[i].name + "?")) { S.players.splice(i, 1); save(); render(); }
+  if (confirm("Remove " + S.players[i].name + "?")) { const n = S.players[i].name; S.players.splice(i, 1); buildWave(); logEv("remove", n); save(); render(); }
 }
-function resetTimes() { if (confirm("Reset all player court times?")) { S.players.forEach(p => p.secs = 0); S.clock = 0; save(); render(); } }
-function resetAll() { if (confirm("Reset the whole game?")) { localStorage.removeItem(KEY); clearInterval(timer); S = load(); render(); } }
+function resetTimes() {
+  if (confirm("Reset all player court times?")) {
+    S.players.forEach(p => { p.secs = 0; p.onSince = 0; p.offSince = 0; }); S.clock = 0; S.lastSwap = -9999;
+    buildWave(); logEv("resetTimes"); save(); render();
+  }
+}
+function resetAll() {
+  if (confirm("Reset the whole game?")) {
+    if (S.log.length) localStorage.setItem(LASTLOG_KEY, logText());
+    localStorage.removeItem(KEY); clearInterval(timer); S = load(); render();
+  }
+}
 
+/* ---------- render ---------- */
 function playerRow(p, i, side, fair) {
   const g = `<span class="g ${p.gender}" onclick="cycleGender(${i})">${p.gender}</span>`;
   const t = `<span class="time" ${fair && p.secs >= fair ? 'style="color:var(--green);font-weight:700"' : ""}>${fmt(p.secs)}</span>`;
@@ -204,9 +303,12 @@ function render() {
   const on = [], off = [];
   S.players.forEach((p, i) => { if (!p.present) return; (p.on ? on : off).push(i); });
   const present = on.length + off.length;
-  const fair = present ? Math.round(GAME_SECS * Math.min(S.courtSize, present) / present) : 0;
+  const fair = fairShare(), P = period();
   document.getElementById("fairline").textContent = present
     ? `Fair share: ${fmt(fair)} each (${Math.min(S.courtSize, present)} on court × 20:00 ÷ ${present} playing)`
+    : "";
+  document.getElementById("paceline").textContent = P
+    ? `Sub wave every ${fmt(P)} (20:00 ÷ ${present} players) — whole bench on, longest-on off`
     : "";
 
   document.getElementById("courtCount").textContent = on.length;
@@ -217,23 +319,16 @@ function render() {
   const girls = on.filter(i => S.players[i].gender === "F").length;
   document.getElementById("genderline").textContent = on.length ? `On court: ${boys} boys · ${girls} girls${on.length - boys - girls ? " · " + (on.length - boys - girls) + " unset" : ""}` : "";
 
+  if (!S.wave && on.length && off.length) buildWave();
   let sug = "No suggestion — get the game started!";
-  if (on.length && off.length) {
-    const courtSorted = on.slice().sort((a, b) => S.players[b].secs - S.players[a].secs);
-    const benchSorted = off.slice().sort((a, b) => S.players[a].secs - S.players[b].secs);
-    const remain = Math.max(0, GAME_SECS - S.clock);
-    const items = [];
-    for (let k = 0; k < Math.min(courtSorted.length, benchSorted.length); k++) {
-      const c = S.players[courtSorted[k]], b = S.players[benchSorted[k]];
-      const due = Math.max(0, Math.min(
-        240 - (c.secs - b.secs),               // pacing: ~4-min shifts
-        fair - c.secs,                         // court player reaching their fair share
-        remain - Math.max(0, fair - b.secs)    // last chance for bench player to reach fair share
-      ));
-      items.push({ a: courtSorted[k], b: benchSorted[k], due });
-    }
-    sug = "Next subs (tap to swap): " + items.map(({ a, b, due }) =>
-      `<button class="pair ${due <= 0 ? "duenow" : ""}" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span><span class="cd">${due <= 0 ? "now!" : "in " + fmt(due)}</span></button>`).join("");
+  const w = S.wave;
+  if (!on.length) sug = "Put the starting " + S.courtSize + " on, then hit Start.";
+  else if (w && w.hold) sug = `<span class="hold">${w.hold}</span>`;
+  else if (w && w.pairs && w.pairs.length) {
+    const left = w.due - S.clock, now = left <= 0;
+    sug = `<div class="wavehead"><span>Next wave (${w.pairs.length}) — tap to swap</span><span class="when ${now ? "now" : ""}">${now ? "NOW" : "at " + fmt(w.due) + " · in " + fmt(left)}</span></div>` +
+      w.pairs.map(([a, b]) =>
+        `<button class="pair ${now ? "duenow" : ""}" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span></button>`).join("");
   }
   document.getElementById("suggest").innerHTML = sug;
 
