@@ -215,6 +215,8 @@ function buildWave() {
   S.wave = { due, pairs: on.slice(0, n).map((a, k) => [a, off[k]]) };
 }
 
+function rebuildWave() { buildWave(); logEv("rebuild"); save(); render(); }
+
 /* ---------- clock ---------- */
 let timer = null;
 function tick() {
@@ -323,10 +325,10 @@ function render() {
   let sug = "No suggestion — get the game started!";
   const w = S.wave;
   if (!on.length) sug = "Put the starting " + S.courtSize + " on, then hit Start.";
-  else if (w && w.hold) sug = `<span class="hold">${w.hold}</span>`;
+  else if (w && w.hold) sug = `<span class="hold">${w.hold}</span> <button class="adjb" style="padding:3px 8px" onclick="rebuildWave()">↻</button>`;
   else if (w && w.pairs && w.pairs.length) {
     const left = w.due - S.clock, now = left <= 0;
-    sug = `<div class="wavehead"><span>Next wave (${w.pairs.length}) — tap to swap</span><span class="when ${now ? "now" : ""}">${now ? "NOW" : "at " + fmt(w.due) + " · in " + fmt(left)}</span></div>` +
+    sug = `<div class="wavehead"><span>Suggested wave (${w.pairs.length}) — tap a pair to swap, or ignore <button class="adjb" style="padding:3px 8px" onclick="rebuildWave()" title="Recompute suggestion">↻</button></span><span class="when ${now ? "now" : ""}">${now ? "NOW" : "at " + fmt(w.due) + " · in " + fmt(left)}</span></div>` +
       w.pairs.map(([a, b]) =>
         `<button class="pair ${now ? "duenow" : ""}" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span></button>`).join("");
   }
