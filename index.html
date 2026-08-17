@@ -101,7 +101,7 @@
       <li>Ages 5–8 (Years 1–4): 20 minutes total on a running clock — two 10-minute halves with a 1-minute half-time.</li>
       <li>Rolling substitutions — sub any time, wave from the bench.</li>
       <li>Tap <b>Sub on / Sub off</b> — timers track everyone's court time automatically.</li>
-      <li>Sub waves: every <b>20:00 ÷ players</b> (e.g. 2:30 with 8) the whole bench comes on for whoever has been on longest — everyone ends within ~30s of fair share.</li>
+      <li>Sub waves at <b>4:00</b> and <b>7:00</b>, then every <b>20:00 ÷ players</b> (2:30 with 8): the whole bench comes on for whoever has been on longest — everyone ends within ~1–2 min of fair share.</li>
       <li>Aim: every present player gets roughly equal minutes across the game.</li>
       <li>Keep the on-court gender mix balanced (count shown above).</li>
       <li>Timers only run while the game clock is running — pause at half-time.</li>
@@ -127,9 +127,11 @@ const DEFAULT_PLAYERS = [
 ];
 const KEY = "miniball-state-v3", LASTLOG_KEY = "miniball-lastlog";
 const GAME_SECS = 20 * 60; // 2 x 10-min halves, running clock
+const OPENING = [240, 420]; // opening waves at 4:00 and 7:00 (kids settle in), then the fair-share rhythm
 const MIN_GAP = 60;        // min seconds between the end of one wave and the next
-const HOLD_SECS = 90;      // no new subs inside the last 90s
-const FINAL_DEFICIT = 90;  // ...unless a bench player is this far under fair share
+const HOLD_SECS = 45;      // no subs at all inside the last 45s
+const FINAL_WIN = 90;      // inside the last 90s only "catch-up" swaps
+const FINAL_GAP = 120;     // ...where the court player is ≥ 2:00 ahead of the bench player (small differences don't matter)
 let S = load();
 function load() {
   let s = null;
@@ -205,12 +207,23 @@ function buildWave() {
   off.sort((a, b) => S.players[a].secs - S.players[b].secs || S.players[a].offSince - S.players[b].offSince);
   const fair = fairShare();
   if (remain < HOLD_SECS) { S.wave = { hold: "No more subs — play it out." }; return; }
-  let due = P ? Math.ceil(floor / P) * P : floor;   // next scheduled wave time at/after floor
+  let due = floor;                                    // next scheduled wave at/after floor
+  if (P) {
+    const last = OPENING[OPENING.length - 1];
+    due = OPENING.find(t => t >= floor);
+    if (due == null) due = last + Math.ceil((floor - last) / P) * P;
+  }
   let n = Math.min(on.length, off.length);
-  if (due > GAME_SECS - HOLD_SECS) {                  // endgame: only if it fixes a real deficit
-    const needy = off.filter(i => fair - S.players[i].secs >= FINAL_DEFICIT);
-    if (!needy.length) { S.wave = { hold: "No more subs — everyone's near fair share. Play it out." }; return; }
-    n = Math.min(n, needy.length); due = floor;
+  if (due > GAME_SECS - FINAL_WIN) {                  // endgame: only catch-up swaps that meaningfully close a gap
+    due = floor;
+    const left = GAME_SECS - due;
+    const pairs = [];
+    for (let k = 0; k < n; k++) {
+      const gap = S.players[on[k]].secs - S.players[off[k]].secs;
+      if (gap >= FINAL_GAP && gap > left) pairs.push([on[k], off[k]]);
+    }
+    if (!pairs.length) { S.wave = { hold: "No more subs — everyone's near fair share. Play it out." }; return; }
+    S.wave = { due, pairs, final: true }; return;
   }
   S.wave = { due, pairs: on.slice(0, n).map((a, k) => [a, off[k]]) };
 }
@@ -310,7 +323,7 @@ function render() {
     ? `Fair share: ${fmt(fair)} each (${Math.min(S.courtSize, present)} on court × 20:00 ÷ ${present} playing)`
     : "";
   document.getElementById("paceline").textContent = P
-    ? `Sub wave every ${fmt(P)} (20:00 ÷ ${present} players) — whole bench on, longest-on off`
+    ? `Sub waves at ${OPENING.map(fmt).join(', ')}, then every ${fmt(P)} (20:00 ÷ ${present} players) — whole bench on, longest-on off`
     : "";
 
   document.getElementById("courtCount").textContent = on.length;
@@ -328,7 +341,7 @@ function render() {
   else if (w && w.hold) sug = `<span class="hold">${w.hold}</span> <button class="adjb" style="padding:3px 8px" onclick="rebuildWave()">↻</button>`;
   else if (w && w.pairs && w.pairs.length) {
     const left = w.due - S.clock, now = left <= 0;
-    sug = `<div class="wavehead"><span>Suggested wave (${w.pairs.length}) — tap a pair to swap, or ignore <button class="adjb" style="padding:3px 8px" onclick="rebuildWave()" title="Recompute suggestion">↻</button></span><span class="when ${now ? "now" : ""}">${now ? "NOW" : "at " + fmt(w.due) + " · in " + fmt(left)}</span></div>` +
+    sug = `<div class="wavehead"><span>${w.final ? "Final catch-up swap" : "Suggested wave"} (${w.pairs.length}) — tap a pair to swap, or ignore <button class="adjb" style="padding:3px 8px" onclick="rebuildWave()" title="Recompute suggestion">↻</button></span><span class="when ${now ? "now" : ""}">${now ? "NOW" : "at " + fmt(w.due) + " · in " + fmt(left)}</span></div>` +
       w.pairs.map(([a, b]) =>
         `<button class="pair ${now ? "duenow" : ""}" onclick="doSwap(${a},${b})"><span class="tag ton">${S.players[b].name}</span><span class="arw">➜</span><span class="tag toff">${S.players[a].name}</span></button>`).join("");
   }
