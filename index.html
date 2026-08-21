@@ -147,6 +147,7 @@ function load() {
   // migrate older saved states
   s.players.forEach(p => { if (p.onSince == null) p.onSince = 0; if (p.offSince == null) p.offSince = 0; });
   if (s.lastSwap == null) s.lastSwap = -9999;
+  if (s.lastDue == null) s.lastDue = -1;
   if (!s.log) s.log = [];
   if (s.wave === undefined) s.wave = null;
   return s;
@@ -209,9 +210,12 @@ function buildWave() {
   if (remain < HOLD_SECS) { S.wave = { hold: "No more subs — play it out." }; return; }
   let due = floor;                                    // next scheduled wave at/after floor
   if (P) {
+    // Next anchor after the slot the last swap fulfilled (lastDue), pushed to the floor if needed.
+    // A late wave therefore doesn't skip the following slot — it just becomes due ASAP.
     const last = OPENING[OPENING.length - 1];
-    due = OPENING.find(t => t >= floor);
-    if (due == null) due = last + Math.ceil((floor - last) / P) * P;
+    due = OPENING.find(t => t > S.lastDue);
+    if (due == null) due = last + Math.ceil((S.lastDue - last + 1) / P) * P;
+    due = Math.max(due, floor);
   }
   let n = Math.min(on.length, off.length);
   if (due > GAME_SECS - FINAL_WIN) {                  // endgame: only catch-up swaps that meaningfully close a gap
@@ -255,6 +259,7 @@ function adjClock(d) {
 /* ---------- actions ---------- */
 function doSwap(a, b) {
   setOn(a, false); setOn(b, true); S.lastSwap = S.clock;
+  if (S.wave && S.wave.due != null) S.lastDue = Math.max(S.lastDue, S.wave.due);
   if (S.wave && S.wave.pairs) {
     S.wave.pairs = S.wave.pairs.filter(([x, y]) => x !== a && y !== b);
     if (!S.wave.pairs.length) buildWave();
@@ -264,9 +269,9 @@ function doSwap(a, b) {
 }
 function subOn(i) {
   if (S.players.filter(p => p.on).length >= S.courtSize) { alert("Court is full — sub someone off first."); return; }
-  setOn(i, true); S.lastSwap = S.clock; buildWave(); logEv("on", S.players[i].name); save(); render();
+  setOn(i, true); S.lastSwap = S.clock; S.lastDue = Math.max(S.lastDue, S.clock); buildWave(); logEv("on", S.players[i].name); save(); render();
 }
-function subOff(i) { setOn(i, false); S.lastSwap = S.clock; buildWave(); logEv("off", S.players[i].name); save(); render(); }
+function subOff(i) { setOn(i, false); S.lastSwap = S.clock; S.lastDue = Math.max(S.lastDue, S.clock); buildWave(); logEv("off", S.players[i].name); save(); render(); }
 function togglePresent(i) {
   const p = S.players[i]; p.present = !p.present; if (!p.present) setOn(i, false);
   buildWave(); logEv("present", p.name + (p.present ? " playing" : " absent")); save(); render();
@@ -287,7 +292,7 @@ function removePlayer(i) {
 }
 function resetTimes() {
   if (confirm("Reset all player court times?")) {
-    S.players.forEach(p => { p.secs = 0; p.onSince = 0; p.offSince = 0; }); S.clock = 0; S.lastSwap = -9999;
+    S.players.forEach(p => { p.secs = 0; p.onSince = 0; p.offSince = 0; }); S.clock = 0; S.lastSwap = -9999; S.lastDue = -1;
     buildWave(); logEv("resetTimes"); save(); render();
   }
 }
